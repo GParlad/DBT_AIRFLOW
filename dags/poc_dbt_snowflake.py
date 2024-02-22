@@ -44,10 +44,33 @@ def transfer_blob_to_snowflake():
     )
     with conn.cursor() as cursor:
         stage_file_path = f"{snowflake_stage}/{blob_file_name}"
-        cursor.execute(f"PUT 'file://{temp_file_path}' '{stage_file_path}' AUTO_COMPRESS=TRUE")
+        cursor.execute(f"PUT 'file://{temp_file_path}' '{stage_file_path}' AUTO_COMPRESS=TRUE OVERWRITE = TRUE")
     
-    print("File uploaded to Snowflake stage successfully!")
 
+def copy_to_snowflake_table():
+
+    # Snowflake configuration
+    snowflake_account = 'fv45033.eu-central-1'
+    snowflake_user = 'GPARLADE'
+    snowflake_password = 'DanielCarter10'
+    snowflake_database = 'POC_DBT_AIRFLOW'
+    snowflake_schema = 'PUBLIC'
+    snowflake_stage = '@MY_INT_STAGE'
+    snowflake_table1= 'BRONZE.TELECOM_ZIPCODE_POPULATION'
+    file_format= 'my_csv_format'
+    file1= 'telecom_zipcode_population.csv.gz'
+
+    # Upload file at internal stage to the table 
+
+    conn2 = snowflake.connector.connect(
+        user=snowflake_user,
+        password=snowflake_password,
+        account=snowflake_account,
+        database=snowflake_database,
+        schema=snowflake_schema
+    )
+    with conn2.cursor() as cursor:
+        cursor.execute(f"COPY INTO {snowflake_table1} FROM {snowflake_stage} FILE_FORMAT= (TYPE = CSV) ON_ERROR = CONTINUE PURGE = TRUE")
 
 profile_config = ProfileConfig(profile_name="default",
                                target_name="dev",
@@ -69,6 +92,11 @@ with DAG(
         python_callable=transfer_blob_to_snowflake
     )
 
+    copy_to_table_task = PythonOperator(
+        task_id='copy_to_table',
+        python_callable=copy_to_snowflake_table
+    )
+
     dbt_tg = DbtTaskGroup(
         project_config=ProjectConfig("/usr/local/airflow/dags/dbt/cosmosproject"),
         operator_args={"install_deps": True},
@@ -78,4 +106,4 @@ with DAG(
 
     e2 = EmptyOperator(task_id="post_dbt")
 
-    transfer_task >> dbt_tg >> e2
+    transfer_task >> copy_to_table_task >> dbt_tg >> e2
