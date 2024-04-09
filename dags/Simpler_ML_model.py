@@ -109,17 +109,12 @@ def snowpark_ml():
 
     output_colss = ['PREDICTION']
 
-    pipeline = Pipeline(steps = [
-        ('scaler', StandardScaler(input_cols=feature_cols, output_cols=feature_cols)),
-        ('model', XGBClassifier(input_cols=feature_cols, label_cols=target_col, output_cols = output_colss))
-    ])
+    model = XGBClassifier(input_cols=feature_cols, label_cols=target_col, output_cols = output_colss)
 
-    pipeline.fit(train_data)
+    model.fit(train_data)
 
-    test_data_model = test_data
-
-    predict_on_training_data = pipeline.predict(train_data)
-    predict_on_test_data = pipeline.predict(test_data_model)
+    predict_on_training_data = model.predict(train_data)
+    predict_on_test_data = model.predict(test_data)
     eval_accuracy = accuracy_score(df=predict_on_test_data, y_true_col_names='CUSTOMER_STATUS', y_pred_col_names='PREDICTION')
     eval_precision = precision_score(df=predict_on_test_data, y_true_col_names='CUSTOMER_STATUS', y_pred_col_names='PREDICTION')
     eval_recall = recall_score(df=predict_on_test_data, y_true_col_names='CUSTOMER_STATUS', y_pred_col_names='PREDICTION')
@@ -130,23 +125,17 @@ def snowpark_ml():
 
     metrics_df = pd.DataFrame(metrics)
 
-    predict_on_test_data = predict_on_test_data[output_colss].to_pandas()
+    predict_on_test_data = predict_on_test_data.to_pandas()
 
     test_data = test_data.to_pandas()
     
-    test_data = session.write_pandas(test_data, "Test_data", auto_create_table=True)
-
     print(type(predict_on_test_data))
 
     print(type(test_data))
 
-    dataframe = [test_data, predict_on_test_data]
+    predict_on_test_data = session.write_pandas(predict_on_test_data, "ML_PREDICTION", auto_create_table=False, overwrite=True)
 
-    df = pd.concat(dataframe, axis = 1)
-
-    predict_on_test_data = session.write_pandas(df, "ML_PREDICTION", auto_create_table=True)
-
-    metrics_df = session.write_pandas(metrics_df, "ML_SCORES", auto_create_table=True)
+    metrics_df = session.write_pandas(metrics_df, "ML_SCORES", auto_create_table=False, overwrite=True)
 
 profile_config = ProfileConfig(profile_name="default",
                                target_name="dev",
@@ -158,7 +147,7 @@ profile_config = ProfileConfig(profile_name="default",
                                                     ))
 
 with DAG(
-    dag_id="poc_dbt_snowflake",
+    dag_id="simpler_ml_model",
     start_date=datetime(2024, 3, 27),
     schedule_interval="@monthly",
 ):
@@ -169,7 +158,7 @@ with DAG(
     )
 
     copy_to_table_task = PythonOperator(
-       task_id='copy_to_table',
+        task_id='copy_to_table',
         python_callable=copy_to_snowflake_table
     )
 
