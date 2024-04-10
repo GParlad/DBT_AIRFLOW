@@ -82,7 +82,6 @@ def snowpark_ml():
     from snowflake.ml.modeling.xgboost import XGBClassifier
     from snowflake.ml.modeling.metrics import accuracy_score, precision_score, recall_score, f1_score
     from snowflake.snowpark import Session 
-    from snowflake.snowpark.types import IntegerType, StringType, StructField, StructType
     import pandas as pd
 
     conn3 = {
@@ -95,7 +94,7 @@ def snowpark_ml():
 
     session = Session.builder.configs(conn3).create()
 
-    data = session.sql("select * from POC_DBT_AIRFLOW.GOLD.UNLIMITED_DATA_CUSTOMERS")   
+    data = session.sql("select * from POC_DBT_AIRFLOW.GOLD.ML_DATASET")   
 
     train_data, test_data = data.random_split(weights=[0.8, 0.2], seed=0)
 

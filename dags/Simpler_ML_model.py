@@ -8,7 +8,7 @@ from cosmos.profiles import SnowflakeUserPasswordProfileMapping
 from azure.storage.blob import BlobServiceClient
 import snowflake.connector
 import tempfile
-from snowflake.snowpark import session
+
 
 def transfer_blob_to_snowflake():
     # Azure Blob Storage configuration
@@ -76,13 +76,11 @@ def copy_to_snowflake_table():
     with conn2.cursor() as cursor:
         cursor.execute(f"COPY INTO {snowflake_table1} FROM {snowflake_stage} FILE_FORMAT= (TYPE = CSV) ON_ERROR = CONTINUE PURGE = TRUE")
 
-def snowpark_ml():    
-    from snowflake.ml.modeling.preprocessing import StandardScaler
-    from snowflake.ml.modeling.pipeline import Pipeline
+def snowpark_ml():
+    from snowflake.ml.modeling.ensemble import RandomForestClassifier
     from snowflake.ml.modeling.xgboost import XGBClassifier
     from snowflake.ml.modeling.metrics import accuracy_score, precision_score, recall_score, f1_score
     from snowflake.snowpark import Session 
-    from snowflake.snowpark.types import IntegerType, StringType, StructField, StructType
     import pandas as pd
 
     conn3 = {
@@ -95,7 +93,7 @@ def snowpark_ml():
 
     session = Session.builder.configs(conn3).create()
 
-    data = session.sql("select * from POC_DBT_AIRFLOW.GOLD.UNLIMITED_DATA_CUSTOMERS")   
+    data = session.sql("select * from POC_DBT_AIRFLOW.GOLD.ML_DATASET")   
 
     train_data, test_data = data.random_split(weights=[0.8, 0.2], seed=0)
 
@@ -109,31 +107,43 @@ def snowpark_ml():
 
     output_colss = ['PREDICTION']
 
-    model = XGBClassifier(input_cols=feature_cols, label_cols=target_col, output_cols = output_colss)
+    #XGBClassifier model
 
-    model.fit(train_data)
+    XGBCmodel = XGBClassifier(input_cols=feature_cols, label_cols=target_col, output_cols = output_colss)
 
-    predict_on_training_data = model.predict(train_data)
-    predict_on_test_data = model.predict(test_data)
-    eval_accuracy = accuracy_score(df=predict_on_test_data, y_true_col_names='CUSTOMER_STATUS', y_pred_col_names='PREDICTION')
-    eval_precision = precision_score(df=predict_on_test_data, y_true_col_names='CUSTOMER_STATUS', y_pred_col_names='PREDICTION')
-    eval_recall = recall_score(df=predict_on_test_data, y_true_col_names='CUSTOMER_STATUS', y_pred_col_names='PREDICTION')
-    eval_f1 = f1_score(df=predict_on_test_data, y_true_col_names='CUSTOMER_STATUS', y_pred_col_names='PREDICTION')
+    XGBCmodel.fit(train_data)
 
-    metrics={'Measures' : ['Accuracy', 'Precision', 'Recall', 'F1'],
-              'Results' : [eval_accuracy, eval_precision, eval_recall, eval_f1]}
+    XGBCmodel_predict = XGBCmodel.predict(test_data)
+
+    XGBC_eval_accuracy = accuracy_score(df=XGBCmodel_predict, y_true_col_names='CUSTOMER_STATUS', y_pred_col_names='PREDICTION')
+    XGBC_eval_precision = precision_score(df=XGBCmodel_predict, y_true_col_names='CUSTOMER_STATUS', y_pred_col_names='PREDICTION')
+    XGBC_eval_recall = recall_score(df=XGBCmodel_predict, y_true_col_names='CUSTOMER_STATUS', y_pred_col_names='PREDICTION')
+    XGBC_eval_f1 = f1_score(df=XGBCmodel_predict, y_true_col_names='CUSTOMER_STATUS', y_pred_col_names='PREDICTION')
+
+    #RandomForest model
+
+    RandomForestmodel = RandomForestClassifier(input_cols=feature_cols, label_cols=target_col, output_cols = output_colss)
+
+    RandomForestmodel.fit(train_data)
+
+    RandomForest_predict = RandomForestmodel.predict(test_data)
+
+    RandomForest_eval_accuracy = accuracy_score(df=RandomForest_predict, y_true_col_names='CUSTOMER_STATUS', y_pred_col_names='PREDICTION')
+    RandomForest_eval_precision = precision_score(df=RandomForest_predict, y_true_col_names='CUSTOMER_STATUS', y_pred_col_names='PREDICTION')
+    RandomForest_eval_recall = recall_score(df=RandomForest_predict, y_true_col_names='CUSTOMER_STATUS', y_pred_col_names='PREDICTION')
+    RandomForest_eval_f1 = f1_score(df=RandomForest_predict, y_true_col_names='CUSTOMER_STATUS', y_pred_col_names='PREDICTION')
+
+    metrics={
+            'Model' : ['XGBC', 'XGBC', 'XGBC', 'XGBC', 'RandomForest', 'RandomForest', 'RandomForest', 'RandomForest'],
+            'Measure' : ['Accuracy', 'Precision', 'Recall', 'F1', 'Accuracy', 'Precision', 'Recall', 'F1'],
+            'Result' : [XGBC_eval_accuracy, XGBC_eval_precision, XGBC_eval_recall, XGBC_eval_f1, RandomForest_eval_accuracy, RandomForest_eval_precision, RandomForest_eval_recall, RandomForest_eval_f1]
+            }
 
     metrics_df = pd.DataFrame(metrics)
+   
+    RandomForest_predict = RandomForest_predict.to_pandas()
 
-    predict_on_test_data = predict_on_test_data.to_pandas()
-
-    test_data = test_data.to_pandas()
-    
-    print(type(predict_on_test_data))
-
-    print(type(test_data))
-
-    predict_on_test_data = session.write_pandas(predict_on_test_data, "ML_PREDICTION", auto_create_table=False, overwrite=True)
+    RandomForest_predict = session.write_pandas(RandomForest_predict, "ML_PREDICTION", auto_create_table=False, overwrite=True)
 
     metrics_df = session.write_pandas(metrics_df, "ML_SCORES", auto_create_table=False, overwrite=True)
 
@@ -152,22 +162,22 @@ with DAG(
     schedule_interval="@monthly",
 ):
 
-    transfer_task = PythonOperator(
-        task_id='transfer_task',
-       python_callable=transfer_blob_to_snowflake
-    )
+    #transfer_task = PythonOperator(
+    #    task_id='transfer_task',
+    #    python_callable=transfer_blob_to_snowflake
+    #)
 
-    copy_to_table_task = PythonOperator(
-        task_id='copy_to_table',
-        python_callable=copy_to_snowflake_table
-    )
+    #copy_to_table_task = PythonOperator(
+   #     task_id='copy_to_table',
+    #    python_callable=copy_to_snowflake_table
+    #)
 
-    dbt_tg = DbtTaskGroup(
-        project_config=ProjectConfig("/usr/local/airflow/dags/dbt/cosmosproject"),
-        operator_args={"install_deps": True},
-        execution_config=ExecutionConfig(dbt_executable_path=f"{os.environ['AIRFLOW_HOME']}/dbt_venv/bin/dbt",),
-        profile_config=profile_config
-    )
+    #dbt_tg = DbtTaskGroup(
+    #    project_config=ProjectConfig("/usr/local/airflow/dags/dbt/cosmosproject"),
+    #    operator_args={"install_deps": True},
+    #    execution_config=ExecutionConfig(dbt_executable_path=f"{os.environ['AIRFLOW_HOME']}/dbt_venv/bin/dbt",),
+    #    profile_config=profile_config
+    #)
 
     ml = PythonOperator(
         task_id='machinelearning_model',
@@ -176,4 +186,5 @@ with DAG(
 
     e2 = EmptyOperator(task_id="post_dbt")
 
-    transfer_task >> copy_to_table_task >> dbt_tg >> ml >> e2
+    #transfer_task >> copy_to_table_task >> dbt_tg >> ml >> e2
+    ml >> e2
