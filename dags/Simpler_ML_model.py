@@ -162,22 +162,22 @@ with DAG(
     schedule_interval="@monthly",
 ):
 
-    #transfer_task = PythonOperator(
-    #    task_id='transfer_task',
-    #    python_callable=transfer_blob_to_snowflake
-    #)
+    transfer_task = PythonOperator(
+        task_id='transfer_task',
+        python_callable=transfer_blob_to_snowflake
+    )
 
-    #copy_to_table_task = PythonOperator(
-   #     task_id='copy_to_table',
-    #    python_callable=copy_to_snowflake_table
-    #)
+    copy_to_table_task = PythonOperator(
+        task_id='copy_to_table',
+        python_callable=copy_to_snowflake_table
+    )
 
-    #dbt_tg = DbtTaskGroup(
-    #    project_config=ProjectConfig("/usr/local/airflow/dags/dbt/cosmosproject"),
-    #    operator_args={"install_deps": True},
-    #    execution_config=ExecutionConfig(dbt_executable_path=f"{os.environ['AIRFLOW_HOME']}/dbt_venv/bin/dbt",),
-    #    profile_config=profile_config
-    #)
+    dbt_tg = DbtTaskGroup(
+        project_config=ProjectConfig("/usr/local/airflow/dags/dbt/cosmosproject"),
+        operator_args={"install_deps": True},
+        execution_config=ExecutionConfig(dbt_executable_path=f"{os.environ['AIRFLOW_HOME']}/dbt_venv/bin/dbt",),
+        profile_config=profile_config
+    )
 
     ml = PythonOperator(
         task_id='machinelearning_model',
@@ -186,5 +186,5 @@ with DAG(
 
     e2 = EmptyOperator(task_id="post_dbt")
 
-    #transfer_task >> copy_to_table_task >> dbt_tg >> ml >> e2
-    ml >> e2
+    transfer_task >> copy_to_table_task >> dbt_tg >> ml >> e2
+    #ml >> e2
